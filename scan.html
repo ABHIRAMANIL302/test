@@ -1,46 +1,70 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Object Detection App</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mobile Object Detection</title>
+
+  <!-- TensorFlow.js -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
   <style>
-    body { text-align: center; font-family: Arial; }
-    video, canvas { width: 90%; max-width: 400px; }
-    #label { font-size: 24px; font-weight: bold; margin-top: 10px; }
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 10px;
+    }
+    video, canvas {
+      width: 90%;
+      max-width: 400px;
+      border-radius: 8px;
+    }
+    #label {
+      font-size: 20px;
+      font-weight: bold;
+      margin-top: 10px;
+    }
   </style>
 </head>
-
 <body>
-  <h2>Mobile Camera Object Detection</h2>
-
+  <h2>Mobile Object Detection</h2>
   <video id="video" autoplay playsinline></video>
   <canvas id="canvas"></canvas>
-  <p id="label">Detecting...</p>
+  <p id="label">Loading model...</p>
 
   <script>
-    const video = document.getElementById("video");
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
-    const labelText = document.getElementById("label");
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const labelText = document.getElementById('label');
 
     async function startCamera() {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" }
-      });
-      video.srcObject = stream;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: "environment" } }, // back camera
+          audio: false
+        });
+        video.srcObject = stream;
 
-      return new Promise(resolve => {
-        video.onloadedmetadata = () => resolve();
-      });
+        return new Promise(resolve => {
+          video.onloadedmetadata = () => {
+            resolve();
+          };
+        });
+      } catch (err) {
+        alert("Error accessing camera: " + err.message);
+      }
     }
 
-    async function startApp() {
+    async function runObjectDetection() {
       await startCamera();
-      const model = await cocoSsd.load();
 
-      setInterval(async () => {
+      const model = await cocoSsd.load();
+      labelText.innerText = "Model loaded. Detecting objects...";
+
+      const detect = async () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
 
@@ -48,28 +72,32 @@
 
         const predictions = await model.detect(video);
 
-        if (predictions.length > 0) {
-          const p = predictions[0];
-          labelText.innerText = "Detected: " + p.class;
+        // Clear previous label
+        labelText.innerText = "No object detected";
 
-          ctx.strokeStyle = "red";
+        predictions.forEach(pred => {
+          const [x, y, width, height] = pred.bbox;
+
+          // Draw bounding box
+          ctx.strokeStyle = 'red';
           ctx.lineWidth = 3;
-          ctx.strokeRect(...p.bbox);
+          ctx.strokeRect(x, y, width, height);
 
-          ctx.fillStyle = "red";
-          ctx.font = "18px Arial";
-          ctx.fillText(
-            p.class + " (" + Math.round(p.score * 100) + "%)",
-            p.bbox[0],
-            p.bbox[1] - 5
-          );
-        } else {
-          labelText.innerText = "No object detected";
-        }
-      }, 200);
+          // Draw label
+          ctx.font = '18px Arial';
+          ctx.fillStyle = 'red';
+          ctx.fillText(`${pred.class} (${Math.round(pred.score*100)}%)`, x, y > 20 ? y-5 : y+20);
+
+          labelText.innerText = `Detected: ${pred.class}`;
+        });
+
+        requestAnimationFrame(detect);
+      };
+
+      detect();
     }
 
-    startApp();
+    runObjectDetection();
   </script>
 </body>
 </html>
